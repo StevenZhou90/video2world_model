@@ -1,0 +1,199 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Pi Digital Twin</title>
+    <link href="{{ url_for('static', filename='bootstrap.min.css') }}" rel="stylesheet">
+    <link href="{{ url_for('static', filename='styles.css') }}" rel="stylesheet">
+  </head>
+  <body>
+    <nav class="navbar navbar-expand-lg navbar-dark bg-dark border-bottom border-secondary">
+      <div class="container-fluid px-4">
+        <span class="navbar-brand fw-semibold">Pi Digital Twin</span>
+        <div class="d-flex align-items-center gap-3 small text-light">
+          <span>Camera {{ settings.camera_index }}</span>
+          <span>YOLOv8n</span>
+          <span>Confidence {{ "%.2f"|format(settings.confidence) }}</span>
+        </div>
+      </div>
+    </nav>
+
+    <main class="container-fluid px-4 py-4">
+      <div id="statusAlert" class="alert alert-warning d-none" role="alert"></div>
+
+      <div class="row g-4 align-items-stretch">
+        <section class="col-12 col-xl-8">
+          <div class="panel h-100">
+            <div class="panel-header">
+              <h1>Live Camera</h1>
+              <span id="streamState" class="badge text-bg-secondary">starting</span>
+            </div>
+            <div class="video-shell">
+              <img id="videoFeed" src="{{ url_for('video_feed') }}" alt="Live camera stream with object detection overlays">
+            </div>
+          </div>
+        </section>
+
+        <section class="col-12 col-xl-4">
+          <div class="metrics-grid">
+            <div class="metric">
+              <span class="metric-label">Total Detections</span>
+              <strong id="totalDetections">0</strong>
+            </div>
+            <div class="metric">
+              <span class="metric-label">Active Classes</span>
+              <strong id="activeCount">0</strong>
+            </div>
+          </div>
+
+          <div class="panel mt-4">
+            <div class="panel-header">
+              <h2>Active Objects</h2>
+            </div>
+            <div id="activeObjects" class="active-list"></div>
+          </div>
+        </section>
+      </div>
+
+      <div class="row g-4 mt-1">
+        <section class="col-12 col-xl-7">
+          <div class="panel">
+            <div class="panel-header">
+              <h2>Last Seen</h2>
+            </div>
+            <div class="table-responsive">
+              <table class="table table-dark table-hover align-middle mb-0">
+                <thead>
+                  <tr>
+                    <th>Object Type</th>
+                    <th>Last Seen</th>
+                    <th class="text-end">Detection Count</th>
+                  </tr>
+                </thead>
+                <tbody id="lastSeenBody"></tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+
+        <section class="col-12 col-xl-5">
+          <div class="panel">
+            <div class="panel-header">
+              <h2>Recent Detection History</h2>
+            </div>
+            <div id="recentHistory" class="history-list"></div>
+          </div>
+        </section>
+      </div>
+    </main>
+
+    <script>
+      const totalDetections = document.getElementById("totalDetections");
+      const activeCount = document.getElementById("activeCount");
+      const activeObjects = document.getElementById("activeObjects");
+      const lastSeenBody = document.getElementById("lastSeenBody");
+      const recentHistory = document.getElementById("recentHistory");
+      const statusAlert = document.getElementById("statusAlert");
+      const streamState = document.getElementById("streamState");
+      const videoFeed = document.getElementById("videoFeed");
+
+      videoFeed.addEventListener("load", () => {
+        streamState.textContent = "live";
+        streamState.className = "badge text-bg-success";
+      });
+
+      videoFeed.addEventListener("error", () => {
+        streamState.textContent = "offline";
+        streamState.className = "badge text-bg-danger";
+      });
+
+      function formatTimestamp(value) {
+        if (!value) return "-";
+        return new Date(value).toLocaleString();
+      }
+
+      function renderActive(items) {
+        activeCount.textContent = items.length;
+        if (!items.length) {
+          activeObjects.innerHTML = '<div class="empty-state">No active objects in the last few seconds.</div>';
+          return;
+        }
+
+        activeObjects.innerHTML = items.map(item => `
+          <div class="active-item">
+            <div>
+              <strong>${item.object_type}</strong>
+              <span>${item.age_seconds}s ago</span>
+            </div>
+            <span class="badge text-bg-info">${item.detection_count}</span>
+          </div>
+        `).join("");
+      }
+
+      function renderLastSeen(items) {
+        if (!items.length) {
+          lastSeenBody.innerHTML = '<tr><td colspan="3" class="text-center text-secondary py-4">No detections recorded yet.</td></tr>';
+          return;
+        }
+
+        lastSeenBody.innerHTML = items.map(item => `
+          <tr>
+            <td class="fw-semibold">${item.object_type}</td>
+            <td>${formatTimestamp(item.last_seen)}</td>
+            <td class="text-end">${item.detection_count}</td>
+          </tr>
+        `).join("");
+      }
+
+      function renderRecent(items) {
+        if (!items.length) {
+          recentHistory.innerHTML = '<div class="empty-state">Recent detections will appear here.</div>';
+          return;
+        }
+
+        recentHistory.innerHTML = items.map(item => `
+          <div class="history-item">
+            <div>
+              <strong>${item.object_type}</strong>
+              <span>${formatTimestamp(item.seen_at)}</span>
+            </div>
+            <span>${Math.round(item.confidence * 100)}%</span>
+          </div>
+        `).join("");
+      }
+
+      async function refreshSummary() {
+        const response = await fetch("/api/summary", { cache: "no-store" });
+        const data = await response.json();
+        totalDetections.textContent = data.total_detections;
+        renderActive(data.active_objects);
+        renderLastSeen(data.objects);
+        renderRecent(data.recent);
+      }
+
+      async function refreshStatus() {
+        const response = await fetch("/api/status", { cache: "no-store" });
+        const data = await response.json();
+        if (data.error) {
+          statusAlert.textContent = data.error;
+          statusAlert.classList.remove("d-none");
+        } else {
+          statusAlert.classList.add("d-none");
+        }
+      }
+
+      async function refresh() {
+        try {
+          await Promise.all([refreshSummary(), refreshStatus()]);
+        } catch (error) {
+          statusAlert.textContent = `Dashboard refresh failed: ${error}`;
+          statusAlert.classList.remove("d-none");
+        }
+      }
+
+      refresh();
+      setInterval(refresh, 3000);
+    </script>
+  </body>
+</html>

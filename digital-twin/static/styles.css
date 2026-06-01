@@ -1,0 +1,129 @@
+:root {
+  color-scheme: dark;
+}
+
+body {
+  background: #111318;
+  color: #eef1f4;
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+
+.panel {
+  background: #1a1d24;
+  border: 1px solid #2b303a;
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.panel-header {
+  align-items: center;
+  border-bottom: 1px solid #2b303a;
+  display: flex;
+  justify-content: space-between;
+  min-height: 58px;
+  padding: 0 18px;
+}
+
+.panel-header h1,
+.panel-header h2 {
+  font-size: 1rem;
+  font-weight: 700;
+  margin: 0;
+}
+
+.video-shell {
+  align-items: center;
+  background: #050608;
+  display: flex;
+  justify-content: center;
+  min-height: 360px;
+}
+
+.video-shell img {
+  display: block;
+  height: auto;
+  max-height: 72vh;
+  max-width: 100%;
+  width: 100%;
+}
+
+.metrics-grid {
+  display: grid;
+  gap: 16px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.metric {
+  background: #1a1d24;
+  border: 1px solid #2b303a;
+  border-radius: 8px;
+  padding: 18px;
+}
+
+.metric-label {
+  color: #9aa4b2;
+  display: block;
+  font-size: 0.82rem;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.metric strong {
+  display: block;
+  font-size: 2rem;
+  line-height: 1.1;
+  margin-top: 8px;
+}
+
+.active-list,
+.history-list {
+  display: grid;
+  gap: 10px;
+  max-height: 390px;
+  overflow: auto;
+  padding: 14px;
+}
+
+.active-item,
+.history-item {
+  align-items: center;
+  background: #222733;
+  border: 1px solid #303746;
+  border-radius: 8px;
+  display: flex;
+  justify-content: space-between;
+  padding: 12px;
+}
+
+.active-item span,
+.history-item span {
+  color: #aeb7c4;
+  display: block;
+  font-size: 0.86rem;
+}
+
+.empty-state {
+  color: #9aa4b2;
+  padding: 16px;
+  text-align: center;
+}
+
+.table {
+  --bs-table-bg: #1a1d24;
+  --bs-table-border-color: #2b303a;
+}
+
+@media (max-width: 575px) {
+  .container-fluid {
+    padding-left: 14px !important;
+    padding-right: 14px !important;
+  }
+
+  .metrics-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .video-shell {
+    min-height: 240px;
+  }
+}
