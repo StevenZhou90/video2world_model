@@ -1,79 +1,57 @@
-# Raspberry Pi 5 Digital Twin Demo
+# Pi Digital Twin
 
-This proof-of-concept runs a Flask dashboard on a Raspberry Pi 5, reads a USB webcam or Pi camera through OpenCV, detects objects with Ultralytics YOLOv8n, overlays bounding boxes on a live MJPEG stream, and records detections in SQLite.
+Flask + OpenCV demo for a Pi 5 or Jetson Nano. It ingests camera frames, detects objects, tracks stable item IDs in a lightweight world model, and stores item state plus observation history in SQLite.
 
-## Install uv
+![Simulated dashboard](docs/simulated-dashboard.png)
 
-```bash
-curl -LsSf https://astral.sh/uv/install.sh | sh
-source "$HOME/.local/bin/env"
-```
-
-## Create the virtual environment
+## Run
 
 ```bash
-cd /home/steven/pi-camera/digital-twin
-uv venv
+python -m venv .venv
 source .venv/bin/activate
-```
-
-## Install dependencies
-
-```bash
-uv pip install --torch-backend cpu -r requirements.txt
-```
-
-The first launch downloads `yolov8n.pt` automatically if it is not already present.
-
-## Run the demo
-
-```bash
-cd /home/steven/pi-camera/digital-twin
-source .venv/bin/activate
+pip install -r requirements.txt
 python app.py
 ```
 
-The Flask server listens on `0.0.0.0:5000`.
+Open `http://localhost:5000`.
 
-Open the dashboard on the Pi:
-
-```text
-http://localhost:5000
-```
-
-Open the dashboard from another machine on the same network:
+## Test Without A Camera
 
 ```bash
-hostname -I
+source .venv/bin/activate
+DB_PATH=/tmp/digital-twin-fake.db SIMULATED_FEED=1 MOCK_DETECTIONS=1 python app.py
 ```
 
-Use the first IP address shown:
+This generates synthetic frames, fake detections, and simulated pose data so the full dashboard/API loop can be tested on any machine.
 
-```text
-http://<PI_IP_ADDRESS>:5000
-```
+## World Model
 
-## Camera and runtime settings
+The current world model is a pragmatic baseline, not a full neural scene model:
 
-Defaults are tuned for a USB camera at `/dev/video0`.
+- YOLO detections, or mock detections in test mode
+- label + bounding-box IoU association
+- stable `item_id`
+- `active`, `stale`, `lost` lifecycle
+- SQLite tables for `items`, `observations`, and `camera_poses`
+- optional SLAM pose input through `SLAM_POSE_FILE` or `SLAM_POSE_URL`
 
-```bash
-CAMERA_INDEX=0 FRAME_WIDTH=640 FRAME_HEIGHT=480 YOLO_CONFIDENCE=0.5 python app.py
-```
+## Useful Config
 
-Useful variables:
+- `CAMERA_INDEX=0`
+- `FRAME_WIDTH=640`
+- `FRAME_HEIGHT=480`
+- `YOLO_CONFIDENCE=0.5`
+- `DETECTION_INTERVAL=0.15`
+- `ACTIVE_SECONDS=10`
+- `LOST_SECONDS=60`
+- `MATCH_IOU=0.35`
+- `SEGMENTATION_MODEL=off`
+- `DB_PATH=/path/to/detections.db`
 
-- `CAMERA_INDEX`: OpenCV camera index, usually `0` for `/dev/video0`.
-- `FRAME_WIDTH`: requested camera width.
-- `FRAME_HEIGHT`: requested camera height.
-- `YOLO_CONFIDENCE`: minimum confidence recorded in SQLite and displayed on video.
-- `DETECTION_INTERVAL`: seconds between YOLO inference passes. Increase this if the Pi is too slow.
-- `ACTIVE_SECONDS`: how recently a class must have been seen to count as active.
+## APIs
 
-## SQLite data
-
-The app creates `detections.db` automatically on startup.
-
-```bash
-sqlite3 detections.db "select object_type, confidence, seen_at from detections order by seen_at desc limit 10;"
-```
+- `GET /api/status`
+- `GET /api/summary`
+- `GET /api/world`
+- `GET /api/items/<item_id>`
+- `GET /api/map`
