@@ -13,7 +13,8 @@
         <span class="navbar-brand fw-semibold">Pi Digital Twin</span>
         <div class="d-flex align-items-center gap-3 small text-light">
           <span>Camera {{ settings.camera_index }}</span>
-          <span>YOLOv8n</span>
+          <span>{{ settings.model_path }}</span>
+          <span>SAM {{ settings.segmentation_model }}</span>
           <span>Confidence {{ "%.2f"|format(settings.confidence) }}</span>
         </div>
       </div>
@@ -45,13 +46,55 @@
               <span class="metric-label">Active Classes</span>
               <strong id="activeCount">0</strong>
             </div>
+            <div class="metric">
+              <span class="metric-label">Tracked Items</span>
+              <strong id="trackedCount">0</strong>
+            </div>
+            <div class="metric">
+              <span class="metric-label">Stale / Lost</span>
+              <strong id="inactiveCount">0</strong>
+            </div>
           </div>
 
           <div class="panel mt-4">
             <div class="panel-header">
-              <h2>Active Objects</h2>
+              <h2>Active Classes</h2>
             </div>
             <div id="activeObjects" class="active-list"></div>
+          </div>
+        </section>
+      </div>
+
+      <div class="row g-4 mt-1">
+        <section class="col-12 col-xl-7">
+          <div class="panel">
+            <div class="panel-header">
+              <h2>World Model Items</h2>
+              <span id="slamState" class="badge text-bg-secondary">slam off</span>
+            </div>
+            <div class="table-responsive">
+              <table class="table table-dark table-hover align-middle mb-0">
+                <thead>
+                  <tr>
+                    <th>Item</th>
+                    <th>Label</th>
+                    <th>State</th>
+                    <th>Last Seen</th>
+                    <th class="text-end">Obs</th>
+                  </tr>
+                </thead>
+                <tbody id="worldItemsBody"></tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+
+        <section class="col-12 col-xl-5">
+          <div class="panel">
+            <div class="panel-header">
+              <h2>Map Adapter</h2>
+            </div>
+            <div id="mapStatus" class="map-status"></div>
           </div>
         </section>
       </div>
@@ -91,12 +134,17 @@
     <script>
       const totalDetections = document.getElementById("totalDetections");
       const activeCount = document.getElementById("activeCount");
+      const trackedCount = document.getElementById("trackedCount");
+      const inactiveCount = document.getElementById("inactiveCount");
       const activeObjects = document.getElementById("activeObjects");
       const lastSeenBody = document.getElementById("lastSeenBody");
       const recentHistory = document.getElementById("recentHistory");
       const statusAlert = document.getElementById("statusAlert");
       const streamState = document.getElementById("streamState");
       const videoFeed = document.getElementById("videoFeed");
+      const worldItemsBody = document.getElementById("worldItemsBody");
+      const slamState = document.getElementById("slamState");
+      const mapStatus = document.getElementById("mapStatus");
 
       videoFeed.addEventListener("load", () => {
         streamState.textContent = "live";
@@ -163,6 +211,50 @@
         `).join("");
       }
 
+      function renderWorld(items) {
+        trackedCount.textContent = items.length;
+        inactiveCount.textContent = items.filter(item => item.state !== "active").length;
+        if (!items.length) {
+          worldItemsBody.innerHTML = '<tr><td colspan="5" class="text-center text-secondary py-4">No tracked items yet.</td></tr>';
+          return;
+        }
+
+        worldItemsBody.innerHTML = items.map(item => `
+          <tr>
+            <td class="fw-semibold">${item.item_id}</td>
+            <td>${item.label}</td>
+            <td><span class="state-pill state-${item.state}">${item.state}</span></td>
+            <td>${formatTimestamp(item.last_seen)}</td>
+            <td class="text-end">${item.observation_count}</td>
+          </tr>
+        `).join("");
+      }
+
+      function renderMap(data) {
+        slamState.textContent = data.slam_enabled ? "slam on" : "slam off";
+        slamState.className = data.slam_enabled ? "badge text-bg-success" : "badge text-bg-secondary";
+        if (!data.camera_pose) {
+          mapStatus.innerHTML = '<div class="empty-state">No camera pose has been received.</div>';
+          return;
+        }
+
+        const mappedItems = data.items.length;
+        mapStatus.innerHTML = `
+          <div class="map-row">
+            <span>Pose Source</span>
+            <strong>${data.camera_pose.source}</strong>
+          </div>
+          <div class="map-row">
+            <span>Pose Time</span>
+            <strong>${formatTimestamp(data.camera_pose.seen_at)}</strong>
+          </div>
+          <div class="map-row">
+            <span>Mapped Items</span>
+            <strong>${mappedItems}</strong>
+          </div>
+        `;
+      }
+
       async function refreshSummary() {
         const response = await fetch("/api/summary", { cache: "no-store" });
         const data = await response.json();
@@ -170,6 +262,18 @@
         renderActive(data.active_objects);
         renderLastSeen(data.objects);
         renderRecent(data.recent);
+      }
+
+      async function refreshWorld() {
+        const response = await fetch("/api/world", { cache: "no-store" });
+        const data = await response.json();
+        renderWorld(data.items);
+      }
+
+      async function refreshMap() {
+        const response = await fetch("/api/map", { cache: "no-store" });
+        const data = await response.json();
+        renderMap(data);
       }
 
       async function refreshStatus() {
@@ -185,7 +289,7 @@
 
       async function refresh() {
         try {
-          await Promise.all([refreshSummary(), refreshStatus()]);
+          await Promise.all([refreshSummary(), refreshStatus(), refreshWorld(), refreshMap()]);
         } catch (error) {
           statusAlert.textContent = `Dashboard refresh failed: ${error}`;
           statusAlert.classList.remove("d-none");
