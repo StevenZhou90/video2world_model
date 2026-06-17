@@ -7,10 +7,8 @@ Flask + OpenCV demo for a Pi 5 or Jetson Nano. It ingests camera frames, detects
 ## Run
 
 ```bash
-python -m venv .venv
-source .venv/bin/activate
-pip install -r requirements.txt
-python app.py
+uv sync
+uv run python app.py
 ```
 
 Open `http://localhost:5000`.
@@ -18,11 +16,62 @@ Open `http://localhost:5000`.
 ## Test Without A Camera
 
 ```bash
-source .venv/bin/activate
-DB_PATH=/tmp/digital-twin-fake.db SIMULATED_FEED=1 MOCK_DETECTIONS=1 python app.py
+DB_PATH=/tmp/digital-twin-fake.db SIMULATED_FEED=1 MOCK_DETECTIONS=1 uv run python app.py
 ```
 
 This generates synthetic frames, fake detections, and simulated pose data so the full dashboard/API loop can be tested on any machine.
+
+## Video to Robotics Sim
+
+The offline pipeline turns a recorded walkthrough video into coarse robotics simulation artifacts:
+
+```bash
+uv run video-to-sim ./walkthrough.mp4 --out artifacts/walkthrough --sample-fps 2
+```
+
+Outputs:
+
+- `metadata.json` and `frames/` from video ingest
+- `reconstruction.json` and `point_cloud.ply` from reconstruction
+- `scene.json`, `map/occupancy_grid.pgm`, and `map/occupancy_grid.yaml`
+- `sim/scene.usda` for Isaac Sim/OpenUSD-style import
+- `preview.png` and `preview.html` for quick local inspection
+
+By default the pipeline uses a deterministic fallback reconstructor so the app works without model weights. The expected `reconstruction.json` shape is:
+
+```json
+{
+  "source": "fallback-frame-depth",
+  "scale": "relative",
+  "camera_poses": [
+    {
+      "frame_id": 0,
+      "timestamp_seconds": 0.0,
+      "position": {"x": 0.0, "y": 0.0, "z": 1.5},
+      "rotation_quat_xyzw": [0.0, 0.0, 0.0, 1.0]
+    }
+  ],
+  "points": [
+    {"x": 0.0, "y": 0.0, "z": 0.0, "confidence": 0.9}
+  ]
+}
+```
+
+### Public Test Video
+
+For a real SLAM-style indoor test, use the TUM RGB-D `freiburg3_cabinet` RGB movie:
+
+```bash
+./scripts/download_tum_test_video.sh
+uv run video-to-sim artifacts/test_videos/tum_freiburg3_cabinet_rgb.avi --out artifacts/tum_freiburg3_cabinet --sample-fps 2
+uv run sim-preview artifacts/tum_freiburg3_cabinet
+```
+
+The source sequence is an Asus Xtion camera moving around an office pedestal, with RGB/depth movies and ground-truth trajectory available from TUM:
+
+```text
+https://cvg.cit.tum.de/data/datasets/rgbd-dataset/download
+```
 
 ## World Model
 

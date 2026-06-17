@@ -1,0 +1,37 @@
+[project]
+name = "digital-twin"
+version = "0.2.0"
+description = "Video-to-robotics-sim digital twin prototype"
+requires-python = ">=3.11"
+dependencies = [
+    "flask>=3.0.0",
+    "numpy>=1.26.0",
+    "opencv-python>=4.9.0",
+    "ultralytics>=8.3.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0.0",
+]
+
+[project.scripts]
+video-to-sim = "sim_pipeline:main"
+sim-preview = "sim_pipeline:preview_main"
+
+[build-system]
+requires = ["setuptools>=69"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+py-modules = [
+    "app",
+    "database",
+    "perception",
+    "sim_pipeline",
+    "world_model",
+]
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["tests"]
