@@ -33,7 +33,7 @@ logging.basicConfig(
     level=os.getenv("LOG_LEVEL", "INFO"),
     format="%(asctime)s %(levelname)s %(message)s",
 )
-LOGGER = logging.getLogger("digital-twin")
+LOGGER = logging.getLogger("video2world_model")
 
 
 def env_flag(name: str, default: str = "0") -> bool:

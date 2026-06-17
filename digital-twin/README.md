@@ -1,6 +1,6 @@
-# Pi Digital Twin
+# video2world_model
 
-Flask + OpenCV demo for a Pi 5 or Jetson Nano. It ingests camera frames, detects objects, tracks stable item IDs in a lightweight world model, and stores item state plus observation history in SQLite.
+Video-to-world-model prototype for turning captured video into reconstruction, map, and Isaac Sim/OpenUSD artifacts.
 
 ![Simulated dashboard](docs/simulated-dashboard.png)
 
@@ -16,7 +16,7 @@ Open `http://localhost:5000`.
 ## Test Without A Camera
 
 ```bash
-DB_PATH=/tmp/digital-twin-fake.db SIMULATED_FEED=1 MOCK_DETECTIONS=1 uv run python app.py
+DB_PATH=/tmp/video2world_model-fake.db SIMULATED_FEED=1 MOCK_DETECTIONS=1 uv run python app.py
 ```
 
 This generates synthetic frames, fake detections, and simulated pose data so the full dashboard/API loop can be tested on any machine.

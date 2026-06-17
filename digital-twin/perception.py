@@ -15,7 +15,7 @@ from ultralytics import YOLO
 from world_model import Detection
 
 
-LOGGER = logging.getLogger("digital-twin")
+LOGGER = logging.getLogger("video2world_model")
 
 
 @dataclass(frozen=True)
