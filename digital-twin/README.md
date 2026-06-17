@@ -81,7 +81,7 @@ uv sync --extra dev --extra vggt
 VGGT_COMMAND="uv run vggt-reconstruct --frames {frames} --out {out} --max-frames 8 --max-points 40000 --confidence-percentile 60 --preprocess-mode crop --coordinate-system isaac-z-up" uv run video-to-sim artifacts/test_videos/tum_freiburg3_cabinet_rgb.avi --out artifacts/tum_freiburg3_cabinet_vggt --sample-fps 1
 ```
 
-VGGT output defaults to Isaac/USD's Z-up coordinate system. The exported USD keeps `World/ReconstructionPoints` visible and hides the coarse `World/CollisionObstacles` group unless `SHOW_COLLISION_BLOCKS=1` is set.
+VGGT output defaults to Isaac/USD's Z-up coordinate system. The exported USD keeps `World/ReconstructionPoints` visible and hides the generated `World/Floor` and coarse `World/CollisionObstacles` groups unless `SHOW_FLOOR=1` or `SHOW_COLLISION_BLOCKS=1` is set.
 
 The source sequence is an Asus Xtion camera moving around an office pedestal, with RGB/depth movies and ground-truth trajectory available from TUM:
 

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import cv2
@@ -37,8 +38,10 @@ def test_reconstruct_map_and_usd_export(tmp_path):
     assert usd.exists()
     assert preview.exists()
     assert (job / "preview.html").exists()
-    assert 'def Xform "RobotSpawn"' in usd.read_text(encoding="utf-8")
-    assert 'def Xform "CollisionObstacles"' in usd.read_text(encoding="utf-8")
+    usd_text = usd.read_text(encoding="utf-8")
+    assert 'upAxis = "Z"' in usd_text
+    assert 'def Xform "RobotSpawn"' in usd_text
+    assert 'def Xform "CollisionObstacles"' in usd_text
 
 
 def test_run_pipeline_creates_expected_artifacts(tmp_path):
@@ -50,6 +53,31 @@ def test_run_pipeline_creates_expected_artifacts(tmp_path):
     assert Path(result["usd"]).exists()
     assert Path(result["preview"]).exists()
     assert (job / "scene.json").exists()
+
+
+def test_vggt_usd_hides_floor_and_collision_blocks_by_default(tmp_path):
+    job = tmp_path / "job"
+    job.mkdir()
+    reconstruction = {
+        "source": "vggt:test",
+        "scale": "relative",
+        "coordinate_system": "isaac-z-up",
+        "camera_poses": [],
+        "points": [
+            {"x": 0.0, "y": 0.0, "z": 0.0, "confidence": 1.0},
+            {"x": 0.4, "y": 0.0, "z": 0.7, "confidence": 1.0},
+            {"x": 0.0, "y": 0.4, "z": 0.6, "confidence": 1.0},
+        ],
+    }
+    (job / "reconstruction.json").write_text(json.dumps(reconstruction), encoding="utf-8")
+
+    build_map(job)
+    usd = export_usd(job)
+
+    usd_text = usd.read_text(encoding="utf-8")
+    assert 'upAxis = "Z"' in usd_text
+    assert 'def Cube "Floor" {\n        token visibility = "invisible"' in usd_text
+    assert 'def Xform "CollisionObstacles" {\n        token visibility = "invisible"' in usd_text
 
 
 def _make_video(path: Path, frame_count: int, fps: int) -> Path:

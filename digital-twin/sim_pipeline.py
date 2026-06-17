@@ -203,15 +203,23 @@ def export_usd(job_dir: Path) -> Path:
         "(",
         '    defaultPrim = "World"',
         "    metersPerUnit = 1",
+        '    upAxis = "Z"',
         ")",
         "",
         'def Xform "World" {',
         '    def Cube "Floor" {',
-        f"        double3 xformOp:scale = ({width * resolution / 2:.4f}, {height * resolution / 2:.4f}, 0.025)",
-        f"        double3 xformOp:translate = ({origin_x + width * resolution / 2:.4f}, {origin_y + height * resolution / 2:.4f}, -0.025)",
-        '        uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:scale"]',
-        "    }",
     ]
+    hide_floor = scene["source"].startswith("vggt:") and not _env_flag("SHOW_FLOOR")
+    if hide_floor:
+        lines.append('        token visibility = "invisible"')
+    lines.extend(
+        [
+            f"        double3 xformOp:scale = ({width * resolution / 2:.4f}, {height * resolution / 2:.4f}, 0.025)",
+            f"        double3 xformOp:translate = ({origin_x + width * resolution / 2:.4f}, {origin_y + height * resolution / 2:.4f}, -0.025)",
+            '        uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:scale"]',
+            "    }",
+        ]
+    )
     lines.extend(_usd_point_cloud_lines(job_dir))
     hide_collision_blocks = scene["source"].startswith("vggt:") and not _env_flag("SHOW_COLLISION_BLOCKS")
     lines.append('    def Xform "CollisionObstacles" {')
