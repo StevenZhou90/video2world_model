@@ -4,6 +4,8 @@ import argparse
 import json
 import math
 import os
+import shlex
+import subprocess
 from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Iterable
@@ -118,6 +120,9 @@ def extract_frames(video_path: Path, output_dir: Path, sample_fps: float = 2.0) 
 
 
 def reconstruct_scene(job_dir: Path) -> Reconstruction:
+    external = os.getenv("VGGT_COMMAND")
+    if external:
+        return _run_external_vggt(external, job_dir)
     return _fallback_reconstruction(job_dir)
 
 
@@ -166,6 +171,7 @@ def build_map(job_dir: Path, resolution: float = 0.1, obstacle_height: float = 0
 
     scene = {
         "source": reconstruction["source"],
+        "coordinate_system": reconstruction.get("coordinate_system", "unknown"),
         "scale": reconstruction["scale"],
         "floor_z": floor_z,
         "resolution": resolution,
@@ -207,7 +213,10 @@ def export_usd(job_dir: Path) -> Path:
         "    }",
     ]
     lines.extend(_usd_point_cloud_lines(job_dir))
+    hide_collision_blocks = scene["source"].startswith("vggt:") and not _env_flag("SHOW_COLLISION_BLOCKS")
     lines.append('    def Xform "CollisionObstacles" {')
+    if hide_collision_blocks:
+        lines.append('        token visibility = "invisible"')
     for index, (x, y, sx, sy) in enumerate(obstacles):
         lines.extend(
             [
@@ -303,6 +312,17 @@ def preview_main(argv: list[str] | None = None) -> int:
     preview = preview_scene(args.job_dir, args.out)
     print(json.dumps({"preview": str(preview), "html": str(args.job_dir / "preview.html")}, indent=2))
     return 0
+
+
+def _run_external_vggt(command: str, job_dir: Path) -> Reconstruction:
+    subprocess.run(shlex.split(command.format(frames=job_dir / "frames", out=job_dir)), check=True)
+    payload = _read_json(job_dir / "reconstruction.json")
+    return Reconstruction(
+        source=payload.get("source", "vggt"),
+        scale=payload.get("scale", "relative"),
+        camera_poses=[CameraPose(**pose) for pose in payload["camera_poses"]],
+        points=[ReconstructionPoint(**point) for point in payload["points"]],
+    )
 
 
 def _fallback_reconstruction(job_dir: Path) -> Reconstruction:
@@ -443,6 +463,10 @@ def _usd_point_cloud_lines(job_dir: Path, max_points: int | None = None) -> list
         f"        float[] widths = [{', '.join([os.getenv('USD_POINT_WIDTH', '0.0125')] * len(usd_points))}]",
         "    }",
     ]
+
+
+def _env_flag(name: str, default: str = "0") -> bool:
+    return os.getenv(name, default).lower() in {"1", "true", "yes", "on"}
 
 
 def _write_preview_html(job_dir: Path, preview_path: Path, scene: dict) -> None:

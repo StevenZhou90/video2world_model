@@ -37,11 +37,18 @@ Outputs:
 - `sim/scene.usda` for Isaac Sim/OpenUSD-style import
 - `preview.png` and `preview.html` for quick local inspection
 
-By default the pipeline uses a deterministic fallback reconstructor so the app works without model weights. The expected `reconstruction.json` shape is:
+By default the pipeline uses a deterministic fallback reconstructor so the app works without model weights. To plug in VGGT, set `VGGT_COMMAND` to a command template that writes `reconstruction.json`:
+
+```bash
+uv sync --extra dev --extra vggt
+VGGT_COMMAND="uv run vggt-reconstruct --frames {frames} --out {out} --max-frames 12 --max-points 60000 --coordinate-system isaac-z-up" uv run video-to-sim ./walkthrough.mp4 --out artifacts/walkthrough
+```
+
+The expected `reconstruction.json` shape is:
 
 ```json
 {
-  "source": "fallback-frame-depth",
+  "source": "vggt",
   "scale": "relative",
   "camera_poses": [
     {
@@ -66,6 +73,15 @@ For a real SLAM-style indoor test, use the TUM RGB-D `freiburg3_cabinet` RGB mov
 uv run video-to-sim artifacts/test_videos/tum_freiburg3_cabinet_rgb.avi --out artifacts/tum_freiburg3_cabinet --sample-fps 2
 uv run sim-preview artifacts/tum_freiburg3_cabinet
 ```
+
+Run the same clip through VGGT instead of the deterministic fallback:
+
+```bash
+uv sync --extra dev --extra vggt
+VGGT_COMMAND="uv run vggt-reconstruct --frames {frames} --out {out} --max-frames 8 --max-points 40000 --confidence-percentile 60 --preprocess-mode crop --coordinate-system isaac-z-up" uv run video-to-sim artifacts/test_videos/tum_freiburg3_cabinet_rgb.avi --out artifacts/tum_freiburg3_cabinet_vggt --sample-fps 1
+```
+
+VGGT output defaults to Isaac/USD's Z-up coordinate system. The exported USD keeps `World/ReconstructionPoints` visible and hides the coarse `World/CollisionObstacles` group unless `SHOW_COLLISION_BLOCKS=1` is set.
 
 The source sequence is an Asus Xtion camera moving around an office pedestal, with RGB/depth movies and ground-truth trajectory available from TUM:
 
