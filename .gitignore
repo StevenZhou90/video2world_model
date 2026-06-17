@@ -7,4 +7,6 @@ digital-twin/.venv/
 digital-twin/.uv-cache/
 digital-twin/*.egg-info/
 digital-twin/artifacts/
+digital-twin/detections.db
+digital-twin/world_model.db
 digital-twin/yolov8n.pt
