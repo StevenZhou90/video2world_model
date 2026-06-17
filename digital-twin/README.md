@@ -83,6 +83,27 @@ VGGT_COMMAND="uv run vggt-reconstruct --frames {frames} --out {out} --max-frames
 
 VGGT output defaults to Isaac/USD's Z-up coordinate system. The exported USD keeps `World/ReconstructionPoints` visible and hides the generated `World/Floor` and coarse `World/CollisionObstacles` groups unless `SHOW_FLOOR=1` or `SHOW_COLLISION_BLOCKS=1` is set.
 
+### VLM-Assisted Mesh Proxy
+
+The VLM mesh step turns a noisy visual reconstruction plus one reference RGB frame into a compact primitive mesh spec, then writes both Blender artifacts and an Isaac/OpenUSD scene. Put your API key in `digital-twin/.env` as `OPENAI_KEY=...` or export `OPENAI_API_KEY`.
+
+```bash
+uv sync
+uv run vlm-to-blender-mesh \
+  --job-dir artifacts/tum_freiburg3_cabinet_rgbd_frame416 \
+  --reference-image artifacts/test_videos/frame_416_rgb.jpg \
+  --no-run-blender
+```
+
+Outputs:
+
+- `mesh/geometry_metrics.json`
+- `mesh/mesh_spec.json`
+- `mesh/generated_mesh.py`
+- `mesh/sim/mesh_scene.usda`
+
+Open `mesh/sim/mesh_scene.usda` in Isaac Sim. If Blender is installed, omit `--no-run-blender` to also export `mesh/generated.obj` and `mesh/generated.glb`. For offline testing without an API call, pass `--mesh-spec path/to/spec.json`.
+
 The source sequence is an Asus Xtion camera moving around an office pedestal, with RGB/depth movies and ground-truth trajectory available from TUM:
 
 ```text

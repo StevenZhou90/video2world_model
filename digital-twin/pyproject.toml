@@ -6,6 +6,7 @@ requires-python = ">=3.11,<3.13"
 dependencies = [
     "flask>=3.0.0",
     "numpy>=1.26.0,<2",
+    "openai>=2.0.0",
     "opencv-python>=4.9.0",
     "ultralytics>=8.3.0",
 ]
@@ -24,6 +25,7 @@ vggt = [
 video-to-sim = "sim_pipeline:main"
 sim-preview = "sim_pipeline:preview_main"
 vggt-reconstruct = "vggt_adapter:main"
+vlm-to-blender-mesh = "vlm_mesh_adapter:main"
 
 [build-system]
 requires = ["setuptools>=69"]
@@ -36,6 +38,7 @@ py-modules = [
     "perception",
     "sim_pipeline",
     "vggt_adapter",
+    "vlm_mesh_adapter",
     "world_model",
 ]
 

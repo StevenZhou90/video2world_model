@@ -1,6 +1,8 @@
 __pycache__/
 *.py[cod]
+.env
 
+digital-twin/.env
 digital-twin/.venv/
 digital-twin/.uv-cache/
 digital-twin/*.egg-info/
