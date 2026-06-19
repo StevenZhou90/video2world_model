@@ -209,7 +209,7 @@ def export_usd(job_dir: Path) -> Path:
         'def Xform "World" {',
         '    def Cube "Floor" {',
     ]
-    hide_floor = scene["source"].startswith("vggt:") and not _env_flag("SHOW_FLOOR")
+    hide_floor = _is_visual_reconstruction(scene["source"]) and not _env_flag("SHOW_FLOOR")
     if hide_floor:
         lines.append('        token visibility = "invisible"')
     lines.extend(
@@ -221,7 +221,7 @@ def export_usd(job_dir: Path) -> Path:
         ]
     )
     lines.extend(_usd_point_cloud_lines(job_dir))
-    hide_collision_blocks = scene["source"].startswith("vggt:") and not _env_flag("SHOW_COLLISION_BLOCKS")
+    hide_collision_blocks = _is_visual_reconstruction(scene["source"]) and not _env_flag("SHOW_COLLISION_BLOCKS")
     lines.append('    def Xform "CollisionObstacles" {')
     if hide_collision_blocks:
         lines.append('        token visibility = "invisible"')
@@ -475,6 +475,10 @@ def _usd_point_cloud_lines(job_dir: Path, max_points: int | None = None) -> list
 
 def _env_flag(name: str, default: str = "0") -> bool:
     return os.getenv(name, default).lower() in {"1", "true", "yes", "on"}
+
+
+def _is_visual_reconstruction(source: str) -> bool:
+    return source.startswith(("vggt:", "tum-rgbd:"))
 
 
 def _write_preview_html(job_dir: Path, preview_path: Path, scene: dict) -> None:

@@ -19,6 +19,9 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--max-frames", type=int, default=12, help="Evenly sample at most this many frames")
     parser.add_argument("--max-points", type=int, default=60000, help="Maximum reconstructed points to write")
     parser.add_argument("--confidence-percentile", type=float, default=55.0, help="Drop points below this confidence percentile")
+    parser.add_argument("--voxel-size", type=float, default=0.025, help="Voxel size for visual point fusion; set 0 to disable")
+    parser.add_argument("--outlier-radius", type=float, default=0.08, help="Radius for local-density outlier filtering; set 0 to disable")
+    parser.add_argument("--min-neighbors", type=int, default=4, help="Minimum neighboring points required inside outlier radius")
     parser.add_argument("--preprocess-mode", choices=["crop", "pad"], default="crop", help="VGGT image preprocessing mode")
     parser.add_argument("--use-point-map", action="store_true", help="Use VGGT point-map output instead of depth unprojection")
     parser.add_argument(
@@ -40,6 +43,9 @@ def main(argv: list[str] | None = None) -> int:
         checkpoint=args.checkpoint,
         max_points=args.max_points,
         confidence_percentile=args.confidence_percentile,
+        voxel_size=args.voxel_size,
+        outlier_radius=args.outlier_radius,
+        min_neighbors=args.min_neighbors,
         preprocess_mode=args.preprocess_mode,
         use_point_map=args.use_point_map,
         coordinate_system=args.coordinate_system,
@@ -49,12 +55,46 @@ def main(argv: list[str] | None = None) -> int:
     return 0
 
 
+def clean_main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(description="Clean an existing reconstruction point cloud and rebuild sim artifacts.")
+    parser.add_argument("job_dir", type=Path, help="Existing job directory containing reconstruction.json")
+    parser.add_argument("--out", type=Path, default=None, help="Output job directory, defaults to overwriting job_dir")
+    parser.add_argument("--voxel-size", type=float, default=0.025, help="Voxel size for visual point fusion; set 0 to disable")
+    parser.add_argument("--outlier-radius", type=float, default=0.08, help="Radius for local-density outlier filtering; set 0 to disable")
+    parser.add_argument("--min-neighbors", type=int, default=4, help="Minimum neighboring points required inside outlier radius")
+    args = parser.parse_args(argv)
+
+    output_dir = args.out or args.job_dir
+    output_dir.mkdir(parents=True, exist_ok=True)
+    payload = json.loads((args.job_dir / "reconstruction.json").read_text(encoding="utf-8"))
+    before = len(payload.get("points") or [])
+    payload["points"] = clean_points(
+        payload.get("points") or [],
+        voxel_size=args.voxel_size,
+        outlier_radius=args.outlier_radius,
+        min_neighbors=args.min_neighbors,
+    )
+    _write_json(output_dir / "reconstruction.json", payload)
+    _write_ply(output_dir / "point_cloud.ply", payload["points"])
+
+    from sim_pipeline import build_map, export_usd, preview_scene
+
+    build_map(output_dir)
+    usd = export_usd(output_dir)
+    preview = preview_scene(output_dir)
+    print(json.dumps({"input_points": before, "output_points": len(payload["points"]), "usd": str(usd), "preview": str(preview)}, indent=2))
+    return 0
+
+
 def run_vggt(
     frame_paths: list[Path],
     output_dir: Path,
     checkpoint: str,
     max_points: int,
     confidence_percentile: float,
+    voxel_size: float,
+    outlier_radius: float,
+    min_neighbors: int,
     preprocess_mode: str,
     use_point_map: bool,
     coordinate_system: str,
@@ -96,6 +136,7 @@ def run_vggt(
 
     colors = _tensor_to_numpy(images).transpose(0, 2, 3, 1)
     points = _sample_points(world_points, confidence, colors, max_points, confidence_percentile)
+    points = clean_points(points, voxel_size=voxel_size, outlier_radius=outlier_radius, min_neighbors=min_neighbors)
     camera_poses = _camera_poses(frame_paths, output_dir, camera_to_world)
 
     reconstruction = {
@@ -184,6 +225,103 @@ def _sample_points(
                 "r": int(color[0]),
                 "g": int(color[1]),
                 "b": int(color[2]),
+            }
+        )
+    return output
+
+
+def clean_points(
+    points: list[dict],
+    voxel_size: float,
+    outlier_radius: float,
+    min_neighbors: int,
+) -> list[dict]:
+    cleaned = points
+    if voxel_size > 0:
+        cleaned = _voxel_downsample(cleaned, voxel_size)
+    if outlier_radius > 0 and min_neighbors > 0:
+        cleaned = _radius_outlier_filter(cleaned, outlier_radius, min_neighbors)
+    return cleaned
+
+
+def _voxel_downsample(points: list[dict], voxel_size: float) -> list[dict]:
+    if not points:
+        return []
+
+    xyz, confidence, colors = _points_to_arrays(points)
+    voxels = np.floor(xyz / voxel_size).astype(np.int64)
+    unique_voxels, inverse = np.unique(voxels, axis=0, return_inverse=True)
+    weights = np.clip(confidence, 1e-6, None)
+    weight_sum = np.bincount(inverse, weights=weights)
+
+    downsampled_xyz = np.column_stack(
+        [
+            np.bincount(inverse, weights=xyz[:, axis] * weights) / weight_sum
+            for axis in range(3)
+        ]
+    )
+    downsampled_colors = np.column_stack(
+        [
+            np.bincount(inverse, weights=colors[:, axis] * weights) / weight_sum
+            for axis in range(3)
+        ]
+    )
+    downsampled_confidence = np.bincount(inverse, weights=confidence * weights) / weight_sum
+
+    order = np.lexsort((unique_voxels[:, 2], unique_voxels[:, 1], unique_voxels[:, 0]))
+    return _arrays_to_points(downsampled_xyz[order], downsampled_confidence[order], downsampled_colors[order])
+
+
+def _radius_outlier_filter(points: list[dict], radius: float, min_neighbors: int) -> list[dict]:
+    if not points:
+        return []
+
+    xyz, confidence, colors = _points_to_arrays(points)
+    cells = np.floor(xyz / radius).astype(np.int64)
+    buckets: dict[tuple[int, int, int], list[int]] = {}
+    for index, cell in enumerate(cells):
+        buckets.setdefault((int(cell[0]), int(cell[1]), int(cell[2])), []).append(index)
+
+    keep = np.zeros(len(points), dtype=bool)
+    radius_sq = radius * radius
+    offsets = [(dx, dy, dz) for dx in (-1, 0, 1) for dy in (-1, 0, 1) for dz in (-1, 0, 1)]
+    for index, cell in enumerate(cells):
+        candidate_indices: list[int] = []
+        base = (int(cell[0]), int(cell[1]), int(cell[2]))
+        for dx, dy, dz in offsets:
+            candidate_indices.extend(buckets.get((base[0] + dx, base[1] + dy, base[2] + dz), []))
+        if len(candidate_indices) <= min_neighbors:
+            continue
+        candidates = np.asarray(candidate_indices, dtype=np.int64)
+        delta = xyz[candidates] - xyz[index]
+        neighbor_count = int(np.count_nonzero(np.einsum("ij,ij->i", delta, delta) <= radius_sq)) - 1
+        keep[index] = neighbor_count >= min_neighbors
+
+    if not keep.any():
+        return points
+    return _arrays_to_points(xyz[keep], confidence[keep], colors[keep])
+
+
+def _points_to_arrays(points: list[dict]) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    xyz = np.array([[point["x"], point["y"], point["z"]] for point in points], dtype=np.float32)
+    confidence = np.array([point.get("confidence", 1.0) for point in points], dtype=np.float32)
+    colors = np.array([[point.get("r", 255), point.get("g", 255), point.get("b", 255)] for point in points], dtype=np.float32)
+    return xyz, confidence, colors
+
+
+def _arrays_to_points(xyz: np.ndarray, confidence: np.ndarray, colors: np.ndarray) -> list[dict]:
+    output: list[dict] = []
+    colors = np.clip(np.rint(colors), 0, 255).astype(np.uint8)
+    for index, point in enumerate(xyz):
+        output.append(
+            {
+                "x": round(float(point[0]), 5),
+                "y": round(float(point[1]), 5),
+                "z": round(float(point[2]), 5),
+                "confidence": round(float(confidence[index]), 5),
+                "r": int(colors[index, 0]),
+                "g": int(colors[index, 1]),
+                "b": int(colors[index, 2]),
             }
         )
     return output
