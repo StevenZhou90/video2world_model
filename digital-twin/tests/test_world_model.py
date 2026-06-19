@@ -9,19 +9,17 @@ def test_bbox_iou_handles_overlap_and_miss():
 
 
 def test_world_model_updates_existing_item_by_label_and_iou():
-    times = iter(["2026-06-13T00:00:00+00:00", "2026-06-13T00:00:01+00:00"])
-    model = WorldModel(WorldModelConfig(active_seconds=10, lost_seconds=60, match_iou=0.3), clock=lambda: next(times))
+    model = WorldModel(WorldModelConfig(match_iou=0.3))
 
     first = model.update([Detection("cup", 0.8, (10, 10, 40, 40))])
     second = model.update([Detection("cup", 0.9, (12, 12, 42, 42))])
 
     assert first.observed_items[0].item_id == second.observed_items[0].item_id
-    assert second.observed_items[0].observation_count == 2
     assert second.observed_items[0].confidence == 0.9
 
 
 def test_world_model_creates_new_item_when_label_differs():
-    model = WorldModel(WorldModelConfig(match_iou=0.3), clock=lambda: "2026-06-13T00:00:00+00:00")
+    model = WorldModel(WorldModelConfig(match_iou=0.3))
 
     update = model.update(
         [
@@ -34,21 +32,25 @@ def test_world_model_creates_new_item_when_label_differs():
     assert update.observed_items[0].item_id != update.observed_items[1].item_id
 
 
-def test_world_model_marks_items_stale_and_lost():
-    times = iter(
+def test_world_model_snapshot_keeps_visual_fields_only():
+    model = WorldModel(WorldModelConfig(match_iou=0.3))
+    item = model.update(
         [
-            "2026-06-13T00:00:00+00:00",
-            "2026-06-13T00:00:06+00:00",
-            "2026-06-13T00:00:12+00:00",
+            Detection(
+                "cup",
+                0.8,
+                (10, 10, 40, 40),
+                mask_area=900.0,
+                map_position={"x": 1.0, "y": 2.0, "z": 0.0},
+            )
         ]
-    )
-    model = WorldModel(WorldModelConfig(active_seconds=5, lost_seconds=10), clock=lambda: next(times))
-    item = model.update([Detection("cup", 0.8, (10, 10, 40, 40))]).observed_items[0]
+    ).observed_items[0]
 
-    stale = model.refresh_states()
-    assert stale == [item]
-    assert item.state == "stale"
-
-    lost = model.refresh_states()
-    assert lost == [item]
-    assert item.state == "lost"
+    assert item.as_dict().keys() == {
+        "item_id",
+        "label",
+        "confidence",
+        "bbox",
+        "mask_area",
+        "map_position",
+    }

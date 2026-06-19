@@ -15,14 +15,10 @@ import numpy as np
 from flask import Flask, Response, jsonify, render_template
 
 from database import (
-    get_item_history,
     get_latest_camera_pose,
-    get_summary,
     get_world_items,
     init_db,
     record_camera_pose,
-    record_observation,
-    update_item_states,
     upsert_item,
 )
 from perception import PerceptionConfig, PerceptionPipeline, annotate_frame
@@ -51,8 +47,6 @@ class Settings:
     slam_pose_file: Optional[str] = os.getenv("SLAM_POSE_FILE")
     slam_pose_url: Optional[str] = os.getenv("SLAM_POSE_URL")
     detection_interval: float = float(os.getenv("DETECTION_INTERVAL", "0.15"))
-    active_seconds: int = int(os.getenv("ACTIVE_SECONDS", "10"))
-    lost_seconds: int = int(os.getenv("LOST_SECONDS", "60"))
     match_iou: float = float(os.getenv("MATCH_IOU", "0.35"))
     simulated_feed: bool = env_flag("SIMULATED_FEED")
     mock_detections: bool = env_flag("MOCK_DETECTIONS")
@@ -74,8 +68,6 @@ class CameraDetector:
             )
         self.world_model = WorldModel(
             WorldModelConfig(
-                active_seconds=settings.active_seconds,
-                lost_seconds=settings.lost_seconds,
                 match_iou=settings.match_iou,
             )
         )
@@ -152,9 +144,6 @@ class CameraDetector:
                 annotated = self._update_world_and_annotate(frame)
                 last_detection_time = now
             else:
-                state_changed = self.world_model.refresh_states()
-                if state_changed:
-                    update_item_states(item.as_dict() for item in state_changed)
                 annotated = annotate_frame(frame, self.world_model.snapshot())
 
             encoded_ok, buffer = cv2.imencode(".jpg", annotated, [int(cv2.IMWRITE_JPEG_QUALITY), 82])
@@ -182,9 +171,8 @@ class CameraDetector:
             if self.pipeline is None:
                 raise RuntimeError("Perception pipeline is not initialized")
             detections, pose = self.pipeline.infer(frame)
-        camera_pose_id = None
         if pose is not None:
-            camera_pose_id = record_camera_pose("slam-adapter", json.dumps(pose, sort_keys=True))
+            record_camera_pose("slam-adapter", json.dumps(pose, sort_keys=True))
             with self.lock:
                 self.latest_pose = pose
 
@@ -192,9 +180,6 @@ class CameraDetector:
         for item in update.observed_items:
             payload = item.as_dict()
             upsert_item(payload)
-            record_observation(payload, camera_pose_id=camera_pose_id)
-        if update.state_changed_items:
-            update_item_states(item.as_dict() for item in update.state_changed_items)
 
         return annotate_frame(frame, [item.as_dict() for item in update.observed_items])
 
@@ -291,22 +276,9 @@ def status():
     return jsonify(detector.get_status())
 
 
-@app.get("/api/summary")
-def summary():
-    return jsonify(get_summary(active_seconds=settings.active_seconds))
-
-
 @app.get("/api/world")
 def world():
     return jsonify({"items": get_world_items()})
-
-
-@app.get("/api/items/<item_id>")
-def item_history(item_id: str):
-    item = get_item_history(item_id)
-    if item is None:
-        return jsonify({"error": "item not found"}), 404
-    return jsonify(item)
 
 
 @app.get("/api/map")

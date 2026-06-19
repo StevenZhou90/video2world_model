@@ -39,34 +39,26 @@
         <section class="col-12 col-xl-4">
           <div class="metrics-grid">
             <div class="metric">
-              <span class="metric-label">Total Detections</span>
-              <strong id="totalDetections">0</strong>
-            </div>
-            <div class="metric">
-              <span class="metric-label">Active Classes</span>
-              <strong id="activeCount">0</strong>
-            </div>
-            <div class="metric">
               <span class="metric-label">Tracked Items</span>
               <strong id="trackedCount">0</strong>
             </div>
             <div class="metric">
-              <span class="metric-label">Stale / Lost</span>
-              <strong id="inactiveCount">0</strong>
+              <span class="metric-label">Mapped Items</span>
+              <strong id="mappedCount">0</strong>
             </div>
           </div>
 
           <div class="panel mt-4">
             <div class="panel-header">
-              <h2>Active Classes</h2>
+              <h2>Map Adapter</h2>
             </div>
-            <div id="activeObjects" class="active-list"></div>
+            <div id="mapStatus" class="map-status"></div>
           </div>
         </section>
       </div>
 
       <div class="row g-4 mt-1">
-        <section class="col-12 col-xl-7">
+        <section class="col-12">
           <div class="panel">
             <div class="panel-header">
               <h2>World Model Items</h2>
@@ -78,9 +70,10 @@
                   <tr>
                     <th>Item</th>
                     <th>Label</th>
-                    <th>State</th>
-                    <th>Last Seen</th>
-                    <th class="text-end">Obs</th>
+                    <th class="text-end">Confidence</th>
+                    <th>BBox</th>
+                    <th class="text-end">Mask Area</th>
+                    <th>Map Position</th>
                   </tr>
                 </thead>
                 <tbody id="worldItemsBody"></tbody>
@@ -88,57 +81,12 @@
             </div>
           </div>
         </section>
-
-        <section class="col-12 col-xl-5">
-          <div class="panel">
-            <div class="panel-header">
-              <h2>Map Adapter</h2>
-            </div>
-            <div id="mapStatus" class="map-status"></div>
-          </div>
-        </section>
-      </div>
-
-      <div class="row g-4 mt-1">
-        <section class="col-12 col-xl-7">
-          <div class="panel">
-            <div class="panel-header">
-              <h2>Last Seen</h2>
-            </div>
-            <div class="table-responsive">
-              <table class="table table-dark table-hover align-middle mb-0">
-                <thead>
-                  <tr>
-                    <th>Object Type</th>
-                    <th>Last Seen</th>
-                    <th class="text-end">Detection Count</th>
-                  </tr>
-                </thead>
-                <tbody id="lastSeenBody"></tbody>
-              </table>
-            </div>
-          </div>
-        </section>
-
-        <section class="col-12 col-xl-5">
-          <div class="panel">
-            <div class="panel-header">
-              <h2>Recent Detection History</h2>
-            </div>
-            <div id="recentHistory" class="history-list"></div>
-          </div>
-        </section>
       </div>
     </main>
 
     <script>
-      const totalDetections = document.getElementById("totalDetections");
-      const activeCount = document.getElementById("activeCount");
       const trackedCount = document.getElementById("trackedCount");
-      const inactiveCount = document.getElementById("inactiveCount");
-      const activeObjects = document.getElementById("activeObjects");
-      const lastSeenBody = document.getElementById("lastSeenBody");
-      const recentHistory = document.getElementById("recentHistory");
+      const mappedCount = document.getElementById("mappedCount");
       const statusAlert = document.getElementById("statusAlert");
       const streamState = document.getElementById("streamState");
       const videoFeed = document.getElementById("videoFeed");
@@ -156,66 +104,22 @@
         streamState.className = "badge text-bg-danger";
       });
 
-      function formatTimestamp(value) {
-        if (!value) return "-";
-        return new Date(value).toLocaleString();
+      function formatBbox(bbox) {
+        return bbox.map(value => Number(value).toFixed(1)).join(", ");
       }
 
-      function renderActive(items) {
-        activeCount.textContent = items.length;
-        if (!items.length) {
-          activeObjects.innerHTML = '<div class="empty-state">No active objects in the last few seconds.</div>';
-          return;
-        }
-
-        activeObjects.innerHTML = items.map(item => `
-          <div class="active-item">
-            <div>
-              <strong>${item.object_type}</strong>
-              <span>${item.age_seconds}s ago</span>
-            </div>
-            <span class="badge text-bg-info">${item.detection_count}</span>
-          </div>
-        `).join("");
-      }
-
-      function renderLastSeen(items) {
-        if (!items.length) {
-          lastSeenBody.innerHTML = '<tr><td colspan="3" class="text-center text-secondary py-4">No detections recorded yet.</td></tr>';
-          return;
-        }
-
-        lastSeenBody.innerHTML = items.map(item => `
-          <tr>
-            <td class="fw-semibold">${item.object_type}</td>
-            <td>${formatTimestamp(item.last_seen)}</td>
-            <td class="text-end">${item.detection_count}</td>
-          </tr>
-        `).join("");
-      }
-
-      function renderRecent(items) {
-        if (!items.length) {
-          recentHistory.innerHTML = '<div class="empty-state">Recent detections will appear here.</div>';
-          return;
-        }
-
-        recentHistory.innerHTML = items.map(item => `
-          <div class="history-item">
-            <div>
-              <strong>${item.object_type}</strong>
-              <span>${formatTimestamp(item.seen_at)}</span>
-            </div>
-            <span>${Math.round(item.confidence * 100)}%</span>
-          </div>
-        `).join("");
+      function formatMapPosition(position) {
+        if (!position) return "-";
+        const x = Number(position.x ?? 0).toFixed(2);
+        const y = Number(position.y ?? 0).toFixed(2);
+        const z = Number(position.z ?? 0).toFixed(2);
+        return `${x}, ${y}, ${z}`;
       }
 
       function renderWorld(items) {
         trackedCount.textContent = items.length;
-        inactiveCount.textContent = items.filter(item => item.state !== "active").length;
         if (!items.length) {
-          worldItemsBody.innerHTML = '<tr><td colspan="5" class="text-center text-secondary py-4">No tracked items yet.</td></tr>';
+          worldItemsBody.innerHTML = '<tr><td colspan="6" class="text-center text-secondary py-4">No tracked items yet.</td></tr>';
           return;
         }
 
@@ -223,9 +127,10 @@
           <tr>
             <td class="fw-semibold">${item.item_id}</td>
             <td>${item.label}</td>
-            <td><span class="state-pill state-${item.state}">${item.state}</span></td>
-            <td>${formatTimestamp(item.last_seen)}</td>
-            <td class="text-end">${item.observation_count}</td>
+            <td class="text-end">${Math.round(item.confidence * 100)}%</td>
+            <td><code>${formatBbox(item.bbox)}</code></td>
+            <td class="text-end">${item.mask_area ?? "-"}</td>
+            <td><code>${formatMapPosition(item.map_position)}</code></td>
           </tr>
         `).join("");
       }
@@ -233,6 +138,7 @@
       function renderMap(data) {
         slamState.textContent = data.slam_enabled ? "slam on" : "slam off";
         slamState.className = data.slam_enabled ? "badge text-bg-success" : "badge text-bg-secondary";
+        mappedCount.textContent = data.items.length;
         if (!data.camera_pose) {
           mapStatus.innerHTML = '<div class="empty-state">No camera pose has been received.</div>';
           return;
@@ -245,23 +151,10 @@
             <strong>${data.camera_pose.source}</strong>
           </div>
           <div class="map-row">
-            <span>Pose Time</span>
-            <strong>${formatTimestamp(data.camera_pose.seen_at)}</strong>
-          </div>
-          <div class="map-row">
             <span>Mapped Items</span>
             <strong>${mappedItems}</strong>
           </div>
         `;
-      }
-
-      async function refreshSummary() {
-        const response = await fetch("/api/summary", { cache: "no-store" });
-        const data = await response.json();
-        totalDetections.textContent = data.total_detections;
-        renderActive(data.active_objects);
-        renderLastSeen(data.objects);
-        renderRecent(data.recent);
       }
 
       async function refreshWorld() {
@@ -289,7 +182,7 @@
 
       async function refresh() {
         try {
-          await Promise.all([refreshSummary(), refreshStatus(), refreshWorld(), refreshMap()]);
+          await Promise.all([refreshStatus(), refreshWorld(), refreshMap()]);
         } catch (error) {
           statusAlert.textContent = `Dashboard refresh failed: ${error}`;
           statusAlert.classList.remove("d-none");

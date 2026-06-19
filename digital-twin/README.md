@@ -41,7 +41,7 @@ By default the pipeline uses a deterministic fallback reconstructor so the app w
 
 ```bash
 uv sync --extra dev --extra vggt
-VGGT_COMMAND="uv run vggt-reconstruct --frames {frames} --out {out} --max-frames 12 --max-points 60000 --coordinate-system isaac-z-up" uv run video-to-sim ./walkthrough.mp4 --out artifacts/walkthrough
+VGGT_COMMAND="uv run vggt-reconstruct --frames {frames} --out {out} --max-frames 24 --max-points 120000 --confidence-percentile 65 --voxel-size 0.025 --outlier-radius 0.08 --min-neighbors 4 --coordinate-system isaac-z-up" uv run video-to-sim ./walkthrough.mp4 --out artifacts/walkthrough
 ```
 
 The expected `reconstruction.json` shape is:
@@ -78,10 +78,16 @@ Run the same clip through VGGT instead of the deterministic fallback:
 
 ```bash
 uv sync --extra dev --extra vggt
-VGGT_COMMAND="uv run vggt-reconstruct --frames {frames} --out {out} --max-frames 8 --max-points 40000 --confidence-percentile 60 --preprocess-mode crop --coordinate-system isaac-z-up" uv run video-to-sim artifacts/test_videos/tum_freiburg3_cabinet_rgb.avi --out artifacts/tum_freiburg3_cabinet_vggt --sample-fps 1
+VGGT_COMMAND="uv run vggt-reconstruct --frames {frames} --out {out} --max-frames 24 --max-points 120000 --confidence-percentile 65 --voxel-size 0.025 --outlier-radius 0.08 --min-neighbors 4 --preprocess-mode crop --coordinate-system isaac-z-up" uv run video-to-sim artifacts/test_videos/tum_freiburg3_cabinet_rgb.avi --out artifacts/tum_freiburg3_cabinet_vggt --sample-fps 1
 ```
 
 VGGT output defaults to Isaac/USD's Z-up coordinate system. The exported USD keeps `World/ReconstructionPoints` visible and hides the generated `World/Floor` and coarse `World/CollisionObstacles` groups unless `SHOW_FLOOR=1` or `SHOW_COLLISION_BLOCKS=1` is set.
+
+To clean an existing VGGT reconstruction without rerunning the model:
+
+```bash
+uv run clean-reconstruction artifacts/tum_freiburg3_cabinet_vggt_all_zup_fixed --out artifacts/tum_freiburg3_cabinet_vggt_clean --voxel-size 0.025 --outlier-radius 0.08 --min-neighbors 4
+```
 
 ### VLM-Assisted Mesh Proxy
 
@@ -89,14 +95,20 @@ The VLM mesh step turns a noisy visual reconstruction plus one reference RGB fra
 
 ```bash
 uv sync
+uv run rgbd-to-sim \
+  --rgb-video artifacts/test_videos/tum_freiburg3_cabinet_rgb.avi \
+  --depth-video artifacts/test_videos/tum_freiburg3_cabinet_depth.avi \
+  --out artifacts/tum_freiburg3_cabinet_rgbd_frame416 \
+  --frame 416
 uv run vlm-to-blender-mesh \
   --job-dir artifacts/tum_freiburg3_cabinet_rgbd_frame416 \
-  --reference-image artifacts/test_videos/frame_416_rgb.jpg \
+  --reference-image artifacts/tum_freiburg3_cabinet_rgbd_frame416/reference_frame.jpg \
   --no-run-blender
 ```
 
 Outputs:
 
+- `reference_frame.jpg`
 - `mesh/geometry_metrics.json`
 - `mesh/mesh_spec.json`
 - `mesh/generated_mesh.py`
@@ -112,13 +124,13 @@ https://cvg.cit.tum.de/data/datasets/rgbd-dataset/download
 
 ## World Model
 
-The current world model is a pragmatic baseline, not a full neural scene model:
+The live-camera world model is intentionally lean and visual-first:
 
 - YOLO detections, or mock detections in test mode
 - label + bounding-box IoU association
 - stable `item_id`
-- `active`, `stale`, `lost` lifecycle
-- SQLite tables for `items`, `observations`, and `camera_poses`
+- visual item fields only: `label`, `confidence`, `bbox`, `mask_area`, and optional `map_position`
+- SQLite tables for `items` and `camera_poses`
 - optional SLAM pose input through `SLAM_POSE_FILE` or `SLAM_POSE_URL`
 
 ## Useful Config
@@ -128,16 +140,12 @@ The current world model is a pragmatic baseline, not a full neural scene model:
 - `FRAME_HEIGHT=480`
 - `YOLO_CONFIDENCE=0.5`
 - `DETECTION_INTERVAL=0.15`
-- `ACTIVE_SECONDS=10`
-- `LOST_SECONDS=60`
 - `MATCH_IOU=0.35`
 - `SEGMENTATION_MODEL=off`
-- `DB_PATH=/path/to/detections.db`
+- `DB_PATH=/path/to/world_model.db`
 
 ## APIs
 
 - `GET /api/status`
-- `GET /api/summary`
 - `GET /api/world`
-- `GET /api/items/<item_id>`
 - `GET /api/map`

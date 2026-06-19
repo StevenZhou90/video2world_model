@@ -122,7 +122,7 @@ def annotate_frame(frame, items: list[dict]):
     annotated = frame.copy()
     for item in items:
         x1, y1, x2, y2 = [int(value) for value in item["bbox"]]
-        color = _state_color(item["state"])
+        color = (42, 157, 143)
         cv2.rectangle(annotated, (x1, y1), (x2, y2), color, 2)
         text = f"{item['item_id']} {item['label']} {item['confidence']:.2f}"
         _draw_label(annotated, text, x1, y1, color)
@@ -144,14 +144,6 @@ def _draw_label(frame, text: str, x1: int, y1: int, color: tuple[int, int, int])
         2,
         cv2.LINE_AA,
     )
-
-
-def _state_color(state: str) -> tuple[int, int, int]:
-    if state == "lost":
-        return (91, 95, 106)
-    if state == "stale":
-        return (0, 180, 216)
-    return (42, 157, 143)
 
 
 def _clip_bbox(bbox: tuple[float, float, float, float], width: int, height: int) -> tuple[int, int, int, int]:

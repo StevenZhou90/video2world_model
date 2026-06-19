@@ -75,62 +75,10 @@ body {
   margin-top: 8px;
 }
 
-.active-list,
-.history-list {
-  display: grid;
-  gap: 10px;
-  max-height: 390px;
-  overflow: auto;
-  padding: 14px;
-}
-
-.active-item,
-.history-item {
-  align-items: center;
-  background: #222733;
-  border: 1px solid #303746;
-  border-radius: 8px;
-  display: flex;
-  justify-content: space-between;
-  padding: 12px;
-}
-
-.active-item span,
-.history-item span {
-  color: #aeb7c4;
-  display: block;
-  font-size: 0.86rem;
-}
-
 .empty-state {
   color: #9aa4b2;
   padding: 16px;
   text-align: center;
-}
-
-.state-pill {
-  border-radius: 999px;
-  display: inline-block;
-  font-size: 0.78rem;
-  font-weight: 700;
-  min-width: 58px;
-  padding: 4px 8px;
-  text-align: center;
-}
-
-.state-active {
-  background: #2a9d8f;
-  color: #ffffff;
-}
-
-.state-stale {
-  background: #00b4d8;
-  color: #06131a;
-}
-
-.state-lost {
-  background: #5b5f6a;
-  color: #ffffff;
 }
 
 .map-status {
